@@ -16,7 +16,7 @@ It implements the NOLB method from Hoffmann & Grudinin (2017), using sparse matr
 #+begin_example
 python3 -m venv venv
 source venv/bin/activate
-git clone https://github.com/YOUR_USERNAME/nb_sim.git
+git clone https://github.com/rennney/NB_Sim.git
 cd nb_sim
 pip install -e .
 #+end_example
