@@ -1,0 +1,60 @@
+#+title: Nonlinear Rigid Block Normal-Mode Simulator (nb_sim)
+#+EXPORT_FILE_NAME: index.html
+#+setupfile: docs/setup-rto.org
+
+* Introduction
+
+This package provides an implementation of nonlinear normal mode analysis
+based on rigid blocks for macromolecular systems — including proteins, complexes, and large assemblies.
+
+It implements the NOLB method from Hoffmann & Grudinin (2017), using sparse matrix algebra and GPU-accelerated extrapolation [TODO].
+
+* Install
+
+~nb_sim~ installs in the usual Python way. Use of ~pip~ and a Python virtual environment is recommended.
+
+#+begin_example
+python3 -m venv venv
+source venv/bin/activate
+git clone https://github.com/YOUR_USERNAME/nb_sim.git
+cd nb_sim
+pip install -e .
+#+end_example
+
+* Usage
+
+The ~nb_sim~ command-line interface provides online help:
+
+#+begin_src shell :exports both :results output code :wrap example
+nb_sim
+#+end_src
+
+#+RESULTS:
+#+begin_example
+Usage: nb_sim [OPTIONS] COMMAND [ARGS]...
+
+  NBSim command line interface
+
+Options:
+  --help  Show this message and exit.
+
+Commands:
+  run-simulator  Run Nonlinear Normal Mode Deformation on a Structure
+#+end_example
+
+To run a deformation using RTB-based normal modes:
+
+#+begin_example
+nb_sim run-simulator -i 4bij.pdb -n 10 -a 5.0
+#+end_example
+
+This will:
+- Compute the 10 slowest normal modes,
+- Apply nonlinear deformation with amplitude 5.0,
+- Save the deformed structure to ~4bij.deformed.pdb~,
+- Launch ~PyMOL~ to visualize both structures.
+
+* References
+
+- Hoffmann & Grudinin, *J. Chem. Theory Comput.* (2017), [[https://doi.org/10.1021/acs.jctc.7b00197][DOI: 10.1021/acs.jctc.7b00197]]
+- Original C++ implementation: https://team.inria.fr/nano-d/software/nolb-normal-modes/
