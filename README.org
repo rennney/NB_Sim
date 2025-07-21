@@ -45,13 +45,14 @@ Commands:
 To run a deformation using RTB-based normal modes:
 
 #+begin_example
-nb_sim run-simulator -i 4bij.pdb -n 10 -a 5.0
+nb_sim run-simulator -i 2ch7.pdb -n 10 -a 18.0 -m 1  -f 6
 #+end_example
 
 This will:
 - Compute the 10 slowest normal modes,
-- Apply nonlinear deformation with amplitude 5.0,
-- Save the deformed structure to ~4bij.deformed.pdb~,
+- Apply nonlinear deformation with amplitude 18.0,
+- Perform deformation along normal mode 1,
+- Save 6 deformed structures in range [-amplitude,amplitude] to ~2ch7.deformed.pdb~,
 - Launch ~PyMOL~ to visualize both structures.
 
 * References
