@@ -1,6 +1,7 @@
 import numpy as np
-from scipy.sparse.linalg import eigsh, ArpackNoConvergence
+from scipy.sparse.linalg import eigsh, ArpackNoConvergence , lobpcg
 from scipy.sparse import isspmatrix
+import scipy as sp
 from time import time
 
 def compute_rtb_modes(K, P, n_modes=20, tol=1e-3):
@@ -35,7 +36,16 @@ def compute_rtb_modes(K, P, n_modes=20, tol=1e-3):
     start = time()
     k_total = n_modes + 6
     try:
-        eigvals, eigvecs = eigsh(K_rtb, k=n_modes+6, which='SM', tol=tol)
+        #eigvals, eigvecs = eigsh(K_rtb, k=n_modes+6, which='SM', tol=tol)
+        eigvals, eigvecs = eigsh(K_rtb, k=n_modes+6, sigma=0, which='LM', tol=tol) # if K_rtb is positive semi-defined
+        # Initial guess: random block of shape (N, n_modes+6)
+        #X = np.random.rand(K_rtb.shape[0], n_modes + 6)
+        # Use diagonal as preconditioner
+        #diag = K_rtb.diagonal()
+        #diag[K_rtb.diagonal()==0]=1e-8
+        #M = sp.sparse.diags(1.0 / diag)
+        #eigvals, eigvecs = lobpcg(K_rtb, X, M=M, tol=tol, largest=False)
+        
     except ArpackNoConvergence as e:
         print(f"[WARNING] Only {e.eigenvalues.shape[0]} modes converged out of {n_modes+6}")
         eigvals = e.eigenvalues

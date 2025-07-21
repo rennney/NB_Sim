@@ -1,6 +1,7 @@
 import sys
 import json
 import click
+from time import time
 from pathlib import Path
 from nb_sim.io.viewer import save_pdb, save_pdb_like_original, save_pdb_trajectory, launch_pymol
 from nb_sim.io.pdb_parser import Molecule, resolve_pdb_input
@@ -25,7 +26,6 @@ def cli(ctx, store, outstore):
     '''
     pass
 
-
 @cli.command()
 @click.option("-i", "--input", required=True, type=str,
               help="Input PDB file or PDB ID (e.g., 4bij)")
@@ -44,6 +44,7 @@ def run_simulator(input, output, n_modes, amplitude, view,mode,frames):
     """
     Run Simulation
     """
+    start = time()
     pdb_path = resolve_pdb_input(input)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -72,7 +73,7 @@ def run_simulator(input, output, n_modes, amplitude, view,mode,frames):
     alpha_vals = torch.linspace(-amplitude, amplitude, frames)
     coord_list = [deform_structure(mol,blocks, eigenvec, a,mode_index=mode) for a in alpha_vals]
     save_pdb_trajectory(pdb_path, out_path, coord_list)
-    
+    print(f"[INFO] Full simulation complited in {time() - start:.2f} sec")
     if view:
         launch_pymol(pdb_path, out_path,only_deformed=False)
     
