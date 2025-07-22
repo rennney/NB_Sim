@@ -38,7 +38,7 @@ def build_rtb_projection(blocks, N_atoms):
             except Exception:
                 I_b = np.array(block.compute_inertia_tensor().tolist())
                 #I_b = block.compute_inertia_tensor().cpu().numpy()
-            vals, evecs = np.linalg.eigh(I_b)
+            evals, evecs = np.linalg.eigh(I_b)
             evals_clamped = np.clip(evals, 1e-8, None)  # avoid div by zero
             I_b_inv_sqrt = (evecs @ np.diag(1.0 / np.sqrt(evals_clamped)) @ evecs.T)  # [3x3]
         except np.linalg.LinAlgError:
