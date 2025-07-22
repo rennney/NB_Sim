@@ -60,7 +60,7 @@ def run_simulator(input, output, n_modes, amplitude, view,mode,frames):
     blocks = filter_valid_blocks(mol.blocks)
     P = build_rtb_projection(blocks, N_atoms=len(mol.atoms))
     print(f"[INFO] Computing {n_modes} RTB normal modes...")
-    L_full, eigvals, eigenvec = compute_rtb_modes(K, P, n_modes=n_modes)
+    L_full, eigvals, eigenvec = compute_rtb_modes(K_w, P, n_modes=n_modes)
 
     print(f"[INFO] Applying deformation with amplitude {amplitude}...")
     try:
@@ -72,7 +72,7 @@ def run_simulator(input, output, n_modes, amplitude, view,mode,frames):
     #save_pdb_like_original(pdb_path,out_path, coords_def)
     #print(f"[INFO] Deformed structure saved to {out_path}")
     alpha_vals = torch.linspace(-amplitude, amplitude, frames)
-    coord_list = [deform_structure(mol,blocks, eigenvec, a,mode_index=mode) for a in alpha_vals]
+    coord_list = [deform_structure(mol,blocks, eigenvec/np.sqrt(eigvals[np.newaxis, :]), a,mode_index=mode) for a in alpha_vals]
     save_pdb_trajectory(pdb_path, out_path, coord_list)
     print(f"[INFO] Full simulation complited in {time() - start:.2f} sec")
     if view:
