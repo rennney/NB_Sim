@@ -34,9 +34,9 @@ def apply_nonlinear_deform(coords, v, omega, com, amplitude):
     # Split v into parallel and perpendicular components
     v_parallel = (v @ n) * n
     v_perp = v - v_parallel
-
+    
     # Rotation center
-    r = com + 0.5 * torch.cross(n, v_perp) / (n.norm() + 1e-8)
+    r = com + 0.5 * torch.cross(n, v_perp) / (omega_norm)
 
     R = rotation_matrix(n, dphi)
     rotated = (coords - r) @ R.T + r

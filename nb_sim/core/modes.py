@@ -52,9 +52,9 @@ def compute_rtb_modes(K, P, n_modes=20, tol=1e-3):
         eigvecs = e.eigenvectors
     print(f"[INFO] eigsh completed in {time() - start:.2f} sec")
     # Remove near-zero modes (rigid body)
-    nonzero_mask = eigvals > 1e-8
-    eigvals = eigvals[nonzero_mask]
-    eigvecs = eigvecs[:, nonzero_mask]
+    #nonzero_mask = eigvals > 1e-8
+    #eigvals = eigvals[nonzero_mask]
+    #eigvecs = eigvecs[:, nonzero_mask]
 
     # Project modes back to atom space
     L_full = P @ eigvecs  # [3N x n_modes]

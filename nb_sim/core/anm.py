@@ -2,6 +2,7 @@ import numpy as np
 import torch
 from scipy.spatial import cKDTree
 from scipy.sparse import coo_matrix
+import scipy.sparse as sp
 
 def build_anm_hessian1(coords, gamma=1.0, cutoff=10.0, dtype=np.float32):
     """
@@ -203,3 +204,10 @@ def build_anm_hessian(coords, gamma=1.0, cutoff=10.0, dtype=np.float32):
     K = coo_matrix((data, (row_idx, col_idx)), shape=(3 * N, 3 * N), dtype=dtype)
     print(f"[INFO] Hessian built with {M} spring pairs (batched), dtype={dtype.__name__}")
     return K
+
+
+def mass_weight_hessian(K, masses):
+    mass_diag = np.repeat(masses, 3)  # shape [3N]
+    M_inv_sqrt = 1.0 / np.sqrt(mass_diag)
+    D = sp.diags(M_inv_sqrt)
+    return D @ K @ D
