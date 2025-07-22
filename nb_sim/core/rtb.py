@@ -38,9 +38,9 @@ def build_rtb_projection(blocks, N_atoms):
             except Exception:
                 I_b = np.array(block.compute_inertia_tensor().tolist())
                 #I_b = block.compute_inertia_tensor().cpu().numpy()
-                evals, evecs = np.linalg.eigh(I_b)
-                evals_clamped = np.clip(evals, 1e-8, None)  # avoid div by zero
-                I_b_inv_sqrt = (evecs @ np.diag(1.0 / np.sqrt(evals_clamped)) @ evecs.T)  # [3x3]
+            vals, evecs = np.linalg.eigh(I_b)
+            evals_clamped = np.clip(evals, 1e-8, None)  # avoid div by zero
+            I_b_inv_sqrt = (evecs @ np.diag(1.0 / np.sqrt(evals_clamped)) @ evecs.T)  # [3x3]
         except np.linalg.LinAlgError:
             print(f"[WARN] Skipping block {b} due to singular inertia tensor")
             continue
@@ -56,7 +56,7 @@ def build_rtb_projection(blocks, N_atoms):
                 col = 6 * b + j
                 row_idx.append(row)
                 col_idx.append(col)
-                data.append(np.sqrt(m / Mb))
+                data.append(np.sqrt(m / Mb))#np.sqrt(m / Mb))
 
                 # Rotation block
                 rel_vec = -cross_unit(j, rel)  # e_j × (r_i - COM)
@@ -67,7 +67,7 @@ def build_rtb_projection(blocks, N_atoms):
                     row_idx.append(row)
                     col_idx.append(col)
                     data.append(np.sqrt(m) * rot_vec[k])
-                    #data.append(np.sqrt(m) * rel_vec[k])
+                    #data.append(rel_vec[k])
 
     P = coo_matrix((data, (row_idx, col_idx)), shape=(3 * N_atoms, 6 * len(blocks)))
     return P.tocsr()
