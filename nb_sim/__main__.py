@@ -59,7 +59,6 @@ def run_simulator(input, output, n_modes, amplitude, view,mode,frames):
     print("[INFO] Building RTB projection matrix...")
     blocks = filter_valid_blocks(mol.blocks)
     P = build_rtb_projection(blocks, N_atoms=len(mol.atoms))
-
     print(f"[INFO] Computing {n_modes} RTB normal modes...")
     L_full, eigvals, eigenvec = compute_rtb_modes(K, P, n_modes=n_modes)
 
