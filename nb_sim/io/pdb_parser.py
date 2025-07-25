@@ -23,17 +23,31 @@ class Molecule:
         for model in structure:
             for chain in model:
                 for residue in chain:
-                    res_id = (chain.id, residue.id[1])  # tuple (chain_id, res_num)
+                    hetfield, resseq, icode = residue.id
+
+                    # Skip water molecules
+                    if residue.resname.strip() in {"HOH", "WAT", "H2O"}:
+                        continue
+
+                    # Skip hetero residues (HETATM) if desired
+                    if hetfield.strip() != "":
+                        continue
+
+                    # Use full ID to avoid clashing residues after TER
+                    res_id = (chain.id, resseq, icode)
+                    print(res_id)
                     for atom in residue:
+                        print(atom)
                         element = atom.element.strip().capitalize()
                         if not element:
                             continue
-                        mass = atomic_masses.get(element, 12.0)  # fallback mass
-                        resname = residue.resname.strip()
-                        self.atoms.append((element, res_id, mass,resname))
+
+                        mass = atomic_masses.get(element, 12.0)
+                        serial = atom.serial_number
+                        self.atoms.append((element, res_id, mass, residue.resname.strip(),serial))
                         self.coords.append(atom.coord)
                         self.residue_map.setdefault(res_id, []).append(len(self.atoms) - 1)
-
+        print(self.residue_map)
         self.coords = torch.tensor(self.coords, dtype=torch.float64, device=self.device)
 
     def _build_blocks(self):

@@ -54,34 +54,70 @@ def save_pdb_like_original(pdb_in, pdb_out, coords):
 
         fout.write("END\n")
 
-def save_pdb_trajectory(pdb_in, pdb_out, coord_list):
+def save_pdb_trajectory(pdb_in, pdb_out, coord_list, mol):
     """
-    Save a multi-model PDB trajectory by modifying only x, y, z fields
-    in the original PDB lines (preserves full formatting).
+    Save a multi-model PDB trajectory by updating only x, y, z coordinates
+    for atoms retained in `mol`, matching them by atom serial number.
+    All other lines (TER, skipped atoms, metadata) are preserved.
 
     Args:
-        pdb_in: path to original PDB file
-        pdb_out: path to output trajectory (multi-model PDB)
-        coord_list: list of [N, 3] torch tensors of coordinates
+        pdb_in: original PDB file path
+        pdb_out: output multi-model PDB file path
+        coord_list: list of [N_filtered, 3] torch tensors (only for retained atoms)
+        mol: Molecule object (with filtered atoms, each having a serial number)
     """
     with open(pdb_in, "r") as fin:
-        ref_lines = [line for line in fin if line.startswith(("ATOM", "HETATM"))]
+        orig_lines = fin.readlines()
 
-    n_atoms = len(ref_lines)
+    # Build mapping from atom serial number → original line index
+    serial_to_line_idx = {
+        int(line[6:11]): i
+        for i, line in enumerate(orig_lines)
+        if line.startswith(("ATOM", "HETATM"))
+    }
 
+    # Extract serials from mol.atoms (expecting atom tuples with serial at index 4)
+    atom_serials = []
+    for i, atom in enumerate(mol.atoms):
+        if len(atom) >= 5:
+            atom_serials.append(atom[4])
+        else:
+            raise ValueError(f"Missing serial number in atom {i}: {atom}")
+
+    # Get matching line indices in original file
+    retained_line_indices = []
+    for s in atom_serials:
+        if s not in serial_to_line_idx:
+            raise KeyError(f"[ERROR] Atom serial {s} not found in original PDB file.")
+        retained_line_indices.append(serial_to_line_idx[s])
+
+    # Sanity check
+    for model_idx, coords in enumerate(coord_list):
+        if len(coords) != len(retained_line_indices):
+            raise ValueError(
+                f"[Frame {model_idx}] Coordinate count {len(coords)} "
+                f"≠ number of retained atoms {len(retained_line_indices)}"
+            )
+
+    # Write the new PDB trajectory
     with open(pdb_out, "w") as fout:
         for model_idx, coords in enumerate(coord_list):
-            if len(coords) != n_atoms:
-                raise ValueError(f"[Frame {model_idx}] Coordinate count {len(coords)} ≠ {n_atoms} atoms")
-
             fout.write(f"MODEL     {model_idx+1:4d}\n")
-            for i, line in enumerate(ref_lines):
-                x, y, z = coords[i].tolist()
-                new_xyz = f"{x:8.3f}{y:8.3f}{z:8.3f}"
-                fout.write(line[:30] + new_xyz + line[54:])
+
+            coord_iter = iter(coords.tolist())
+            for i, line in enumerate(orig_lines):
+                if i in retained_line_indices:
+                    x, y, z = next(coord_iter)
+                    new_xyz = f"{x:8.3f}{y:8.3f}{z:8.3f}"
+                    new_line = line[:30] + new_xyz + line[54:]
+                    fout.write(new_line)
+                else:
+                    fout.write(line)
+
             fout.write("ENDMDL\n")
 
         fout.write("END\n")
+
 
 def launch_pymol(pdb_ref=None, pdb_def=None, only_deformed=False, headless=False):
     """

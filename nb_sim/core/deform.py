@@ -1,6 +1,7 @@
 import torch
 from nb_sim.utils.geometry import rotation_matrix, apply_nonlinear_deform
 
+
 def deform_structure(mol,blocks, eigvecs, amplitude, mode_index=0, device=None):
     """
     Apply nonlinear motion to rigid blocks based on eigenmode deformation.
@@ -15,7 +16,8 @@ def deform_structure(mol,blocks, eigvecs, amplitude, mode_index=0, device=None):
     """
     device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    coords_out = mol.coords.new_zeros((mol.coords.shape[0], 3)).double()
+    #coords_out = mol.coords.new_zeros((mol.coords.shape[0], 3)).double()
+    coords_out = mol.coords.clone()
     # Map from atom index to final coord
     atom_idx_map = {}
 
@@ -43,6 +45,7 @@ def deform_structure(mol,blocks, eigvecs, amplitude, mode_index=0, device=None):
         # Apply extrapolation per block
         #print(f"[DEBUG] block {b}, v = {v}, ||v|| = {v.norm():.4e}, omega = {omega}, ||omega|| = {omega.norm():.4e}")
         coords_def = apply_nonlinear_deform(atom_coords, v/Mb**0.5, I_inv_sqrt @ omega, com, amplitude)
+
         for i, aid in enumerate(atom_ids):
             atom_idx_map[aid] = coords_def[i]
 
