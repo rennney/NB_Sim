@@ -35,7 +35,6 @@ class Molecule:
 
                     # Use full ID to avoid clashing residues after TER
                     res_id = (chain.id, resseq, icode)
-                    print(res_id)
                     for atom in residue:
                         print(atom)
                         element = atom.element.strip().capitalize()
@@ -47,7 +46,6 @@ class Molecule:
                         self.atoms.append((element, res_id, mass, residue.resname.strip(),serial))
                         self.coords.append(atom.coord)
                         self.residue_map.setdefault(res_id, []).append(len(self.atoms) - 1)
-        print(self.residue_map)
         self.coords = torch.tensor(self.coords, dtype=torch.float64, device=self.device)
 
     def _build_blocks(self):
