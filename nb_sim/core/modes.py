@@ -4,7 +4,7 @@ from scipy.sparse import isspmatrix
 import scipy as sp
 from time import time
 
-def compute_rtb_modes(K, P, n_modes=20, tol=1e-3):
+def compute_rtb_modes(K, P, n_modes=20, tol=1e-6):
     """
     Compute lowest-frequency RTB normal modes.
     
@@ -34,11 +34,14 @@ def compute_rtb_modes(K, P, n_modes=20, tol=1e-3):
     # We skip first 6 zero modes (rigid-body)
     print(f"[INFO] Diagonalizing projected Hessian to find {n_modes} low-frequency modes...")
     start = time()
-    k_total = n_modes + 6
     try:
-        #eigvals, eigvecs = eigsh(K_rtb, k=n_modes+6, which='SM', tol=tol)
+        #eigvals, eigvecs = eigsh(K_rtb, k=n_modes, which='SM', tol=tol)
+        import sys
+        np.set_printoptions(threshold=sys.maxsize)
         eigvals, eigvecs = eigsh(K_rtb, k=n_modes+6, sigma=0, which='LM', tol=tol) # if K_rtb is positive semi-defined
         # Initial guess: random block of shape (N, n_modes+6)
+        #print(eigvals)
+        #print(eigvecs[:,0])
         #X = np.random.rand(K_rtb.shape[0], n_modes + 6)
         # Use diagonal as preconditioner
         #diag = K_rtb.diagonal()
@@ -47,7 +50,7 @@ def compute_rtb_modes(K, P, n_modes=20, tol=1e-3):
         #eigvals, eigvecs = lobpcg(K_rtb, X, M=M, tol=tol, largest=False)
         
     except ArpackNoConvergence as e:
-        print(f"[WARNING] Only {e.eigenvalues.shape[0]} modes converged out of {n_modes+6}")
+        print(f"[WARNING] Only {e.eigenvalues.shape[0]} modes converged out of {n_modes}")
         eigvals = e.eigenvalues
         eigvecs = e.eigenvectors
     print(f"[INFO] eigsh completed in {time() - start:.2f} sec")
@@ -56,6 +59,8 @@ def compute_rtb_modes(K, P, n_modes=20, tol=1e-3):
     #eigvals = eigvals[nonzero_mask]
     #eigvecs = eigvecs[:, nonzero_mask]
 
+
+
     # Project modes back to atom space
     L_full = P @ eigvecs  # [3N x n_modes]
-    return L_full, eigvals , eigvecs
+    return L_full, eigvals[6:] , eigvecs[:, 6:]
