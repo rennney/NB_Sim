@@ -25,8 +25,8 @@ def apply_nonlinear_deform(coords, v, omega, com, amplitude):
     coords: [N, 3]
     """
     omega_norm = omega.norm()
-    if omega_norm < 1e-8:
-        return coords + amplitude * v  # pure translation
+    #if omega_norm < 1e-8:
+    #    return coords + amplitude * v  # pure translation
 
     n = omega / omega_norm
     dphi = amplitude * omega_norm
@@ -36,8 +36,9 @@ def apply_nonlinear_deform(coords, v, omega, com, amplitude):
     v_perp = v - v_parallel
     
     # Rotation center
-    r = com + 0.5 * torch.cross(n, v_perp) / (omega_norm)
+    r = com +  torch.cross(n, v_perp) / (omega_norm)
 
     R = rotation_matrix(n, dphi)
     rotated = (coords - r) @ R.T + r
+    
     return rotated + v_parallel * amplitude
