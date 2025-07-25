@@ -36,7 +36,6 @@ class Molecule:
                     # Use full ID to avoid clashing residues after TER
                     res_id = (chain.id, resseq, icode)
                     for atom in residue:
-                        print(atom)
                         element = atom.element.strip().capitalize()
                         if not element:
                             continue
