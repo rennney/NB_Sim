@@ -19,8 +19,8 @@ class Molecule:
     def _load_pdb(self, filename):
         parser = PDBParser(QUIET=True)
         structure = parser.get_structure('mol', filename)
-
         for model in structure:
+            print("Number of Chains : ",len(model))
             for chain in model:
                 for residue in chain:
                     hetfield, resseq, icode = residue.id

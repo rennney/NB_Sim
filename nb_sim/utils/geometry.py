@@ -6,7 +6,7 @@ def rotation_matrix(axis, angle):
     axis: [3], unit vector
     angle: scalar
     """
-    axis = axis / (axis.norm() + 1e-8)
+    #axis = axis / (axis.norm() + 1e-8)
     K = skew(axis)
     I = torch.eye(3, device=axis.device, dtype=axis.dtype)
     return I + torch.sin(angle) * K + (1 - torch.cos(angle)) * (K @ K)
@@ -27,10 +27,8 @@ def apply_nonlinear_deform(coords, v, omega, com, amplitude):
     omega_norm = omega.norm()
     #if omega_norm < 1e-8:
     #    return coords + amplitude * v  # pure translation
-
     n = omega / omega_norm
     dphi = amplitude * omega_norm
-
     # Split v into parallel and perpendicular components
     v_parallel = (v @ n) * n
     v_perp = v - v_parallel
@@ -39,6 +37,7 @@ def apply_nonlinear_deform(coords, v, omega, com, amplitude):
     r = com +  torch.cross(n, v_perp) / (omega_norm)
 
     R = rotation_matrix(n, dphi)
+
     rotated = (coords - r) @ R.T + r
     
     return rotated + v_parallel * amplitude

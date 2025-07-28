@@ -4,7 +4,95 @@ from scipy.spatial import cKDTree
 from scipy.sparse import coo_matrix
 import scipy.sparse as sp
 
-def build_anm_hessian1(coords, gamma=1.0, cutoff=10.0, dtype=np.float32):
+def build_anm_hessian(coords, gamma=1.0, cutoff=15, dtype=np.float64):
+    """
+    Build a memory-efficient sparse ANM Hessian using KD-tree.
+
+    Args:
+        coords: torch.Tensor of shape [N, 3]
+        gamma: spring constant
+        cutoff: cutoff radius in Ångstroms
+        dtype: np.float32 (default) or np.float64
+
+    Returns:
+        scipy.sparse.coo_matrix: (3N x 3N) stiffness matrix
+        
+    Fully Vectorized
+    """
+    device = coords.device
+    try:
+        coords_np = coords.detach().to("cpu").numpy().astype(dtype)
+    except Exception:
+        coords_np = np.array(coords.tolist(), dtype=dtype)
+
+    N = coords_np.shape[0]
+    tree = cKDTree(coords_np)
+    pairs = tree.query_pairs(r=cutoff, output_type='ndarray')
+    i, j = pairs[:, 0], pairs[:, 1]
+
+    rij = coords_np[i] - coords_np[j]
+    dist2 = np.sum(rij ** 2, axis=1)
+    valid = dist2 > 1e-18
+    i = i[valid]
+    j = j[valid]
+    rij = rij[valid]
+    dist2 = dist2[valid]
+
+    M = len(i)
+    rij_outer = rij[:, :, None] * rij[:, None, :]  # [M, 3, 3]
+    k_ij = -gamma * rij_outer / dist2[:, None, None]  # [M, 3, 3]
+    # Batch indexing for 3x3 blocks
+    blocks = np.arange(3)
+    a, b = np.meshgrid(blocks, blocks, indexing='ij')  # (3,3)
+    a = a.flatten()  # (9,)
+    b = b.flatten()  # (9,)
+
+    idx_repeat = np.repeat(np.arange(M), 9)
+    a_rep = np.tile(a, M)
+    b_rep = np.tile(b, M)
+    
+    row_offdiag_ij = 3 * np.repeat(i, 9) + np.tile(a, M)
+    col_offdiag_ij = 3 * np.repeat(j, 9) + np.tile(b, M)
+    val_offdiag_ij = k_ij[idx_repeat, a_rep, b_rep]
+
+    row_offdiag_ji = 3 * np.repeat(j, 9) + np.tile(a, M)
+    col_offdiag_ji = 3 * np.repeat(i, 9) + np.tile(b, M)
+    val_offdiag_ji = k_ij[idx_repeat, b_rep, a_rep]
+
+    row_diag_ii = 3 * np.repeat(i, 9) + np.tile(a, M)
+    col_diag_ii = 3 * np.repeat(i, 9) + np.tile(b, M)
+    val_diag_ii = -k_ij[idx_repeat, a_rep, b_rep]
+
+    row_diag_jj = 3 * np.repeat(j, 9) + np.tile(a, M)
+    col_diag_jj = 3 * np.repeat(j, 9) + np.tile(b, M)
+    val_diag_jj = -k_ij[idx_repeat, b_rep, a_rep]
+
+    # Stack all triplets
+    row_idx = np.concatenate([row_offdiag_ij, row_offdiag_ji, row_diag_ii, row_diag_jj])
+    col_idx = np.concatenate([col_offdiag_ij, col_offdiag_ji, col_diag_ii, col_diag_jj])
+    data =    np.concatenate([val_offdiag_ij, val_offdiag_ji, val_diag_ii, val_diag_jj])
+
+    # Now coo_matrix
+    K = coo_matrix((data, (row_idx, col_idx)), shape=(3 * N, 3 * N), dtype=dtype)
+    print(f"[INFO] Hessian built with {M} spring pairs (batched), dtype={dtype.__name__}")
+    
+    return K
+
+
+def mass_weight_hessian(K, masses):
+    mass_diag = np.repeat(masses, 3)  # shape [3N]
+    M_inv_sqrt = 1.0 / np.sqrt(mass_diag)
+    D = sp.diags(M_inv_sqrt)
+    return D @ K @ D
+
+
+
+
+
+#old version
+
+
+def build_anm_hessian1(coords, gamma=1, cutoff=5.0, dtype=np.float32):
     """
     Build a memory-efficient sparse ANM Hessian using KD-tree.
 
@@ -59,7 +147,7 @@ def build_anm_hessian1(coords, gamma=1.0, cutoff=10.0, dtype=np.float32):
     return K
 
 
-def build_anm_hessian2(coords, gamma=1.0, cutoff=10.0, dtype=np.float32):
+def build_anm_hessian2(coords, gamma=1.0, cutoff=5.0, dtype=np.float32):
     """
     Build a memory-efficient sparse ANM Hessian using KD-tree and vectorized operations.
 
@@ -130,84 +218,3 @@ def build_anm_hessian2(coords, gamma=1.0, cutoff=10.0, dtype=np.float32):
     K = coo_matrix((data, (row_idx, col_idx)), shape=(3 * N, 3 * N), dtype=dtype)
     print(f"[INFO] Hessian built with {len(i)} spring pairs (vectorized), dtype={dtype.__name__}")
     return K
-
-def build_anm_hessian(coords, gamma=1.0, cutoff=10.0, dtype=np.float32):
-    """
-    Build a memory-efficient sparse ANM Hessian using KD-tree.
-
-    Args:
-        coords: torch.Tensor of shape [N, 3]
-        gamma: spring constant
-        cutoff: cutoff radius in Ångstroms
-        dtype: np.float32 (default) or np.float64
-
-    Returns:
-        scipy.sparse.coo_matrix: (3N x 3N) stiffness matrix
-        
-    Fully Vectorized
-    """
-    device = coords.device
-    try:
-        coords_np = coords.detach().to("cpu").numpy().astype(dtype)
-    except Exception:
-        coords_np = np.array(coords.tolist(), dtype=dtype)
-
-    N = coords_np.shape[0]
-    tree = cKDTree(coords_np)
-    pairs = tree.query_pairs(r=cutoff, output_type='ndarray')
-    i, j = pairs[:, 0], pairs[:, 1]
-
-    rij = coords_np[i] - coords_np[j]
-    dist2 = np.sum(rij ** 2, axis=1)
-    valid = dist2 > 1e-8
-    i = i[valid]
-    j = j[valid]
-    rij = rij[valid]
-    dist2 = dist2[valid]
-
-    M = len(i)
-    rij_outer = rij[:, :, None] * rij[:, None, :]  # [M, 3, 3]
-    k_ij = -gamma * rij_outer / dist2[:, None, None]  # [M, 3, 3]
-
-    # Batch indexing for 3x3 blocks
-    blocks = np.arange(3)
-    a, b = np.meshgrid(blocks, blocks, indexing='ij')  # (3,3)
-    a = a.flatten()  # (9,)
-    b = b.flatten()  # (9,)
-
-    idx_repeat = np.repeat(np.arange(M), 9)
-    a_rep = np.tile(a, M)
-    b_rep = np.tile(b, M)
-    
-    row_offdiag_ij = 3 * np.repeat(i, 9) + np.tile(a, M)
-    col_offdiag_ij = 3 * np.repeat(j, 9) + np.tile(b, M)
-    val_offdiag_ij = k_ij[idx_repeat, a_rep, b_rep]
-
-    row_offdiag_ji = 3 * np.repeat(j, 9) + np.tile(a, M)
-    col_offdiag_ji = 3 * np.repeat(i, 9) + np.tile(b, M)
-    val_offdiag_ji = k_ij[idx_repeat, b_rep, a_rep]
-
-    row_diag_ii = 3 * np.repeat(i, 9) + np.tile(a, M)
-    col_diag_ii = 3 * np.repeat(i, 9) + np.tile(b, M)
-    val_diag_ii = -k_ij[idx_repeat, a_rep, b_rep]
-
-    row_diag_jj = 3 * np.repeat(j, 9) + np.tile(a, M)
-    col_diag_jj = 3 * np.repeat(j, 9) + np.tile(b, M)
-    val_diag_jj = -k_ij[idx_repeat, b_rep, a_rep]
-
-    # Stack all triplets
-    row_idx = np.concatenate([row_offdiag_ij, row_offdiag_ji, row_diag_ii, row_diag_jj])
-    col_idx = np.concatenate([col_offdiag_ij, col_offdiag_ji, col_diag_ii, col_diag_jj])
-    data =    np.concatenate([val_offdiag_ij, val_offdiag_ji, val_diag_ii, val_diag_jj])
-
-    # Now coo_matrix
-    K = coo_matrix((data, (row_idx, col_idx)), shape=(3 * N, 3 * N), dtype=dtype)
-    print(f"[INFO] Hessian built with {M} spring pairs (batched), dtype={dtype.__name__}")
-    return K
-
-
-def mass_weight_hessian(K, masses):
-    mass_diag = np.repeat(masses, 3)  # shape [3N]
-    M_inv_sqrt = 1.0 / np.sqrt(mass_diag)
-    D = sp.diags(M_inv_sqrt)
-    return D @ K @ D

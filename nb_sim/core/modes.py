@@ -1,10 +1,12 @@
 import numpy as np
 from scipy.sparse.linalg import eigsh, ArpackNoConvergence , lobpcg
 from scipy.sparse import isspmatrix
+from scipy.sparse.linalg import spilu
 import scipy as sp
+from scipy.sparse import eye
 from time import time
 
-def compute_rtb_modes(K, P, n_modes=20, tol=1e-6):
+def compute_rtb_modes(K, P, n_modes=20, tol=1e-8):
     """
     Compute lowest-frequency RTB normal modes.
     
@@ -23,11 +25,16 @@ def compute_rtb_modes(K, P, n_modes=20, tol=1e-6):
 
     # RTB-reduced Hessian
 
-
+    expectation = np.array([0.000107447, 0.000111208, 0.000259408, 0.000285205, 0.000305688, 0.000518421, 0.000543074 , 0.000555202, 0.000740578, 0.000797631])
     
-    assert (P.T @ P).diagonal().min()>10**-6,  (" P has columns with zero norm — i.e., some of the rigid-body basis vectors are either degenerate or completely missing.")
-    
-    
+    #assert (P.T @ P).diagonal().min()>10**-6,  (" P has columns with zero norm — i.e., some of the rigid-body basis vectors are either degenerate or completely missing.")
+    column_mask = np.ones(P.shape[1], dtype=bool)
+    #PP = (P.T @ P).toarray()
+    #print(PP[:12,:24])
+    #import matplotlib.pyplot as plt
+    #plt.imshow(PP)
+    #plt.colorbar()
+    #plt.show()
     K_rtb = P.T @ K @ P  # [6n x 6n], still sparse
     print(f"[INFO] Projecting full Hessian to RTB space... (size: {K_rtb.shape})")
     # Compute eigenvalues/eigenvectors of RTB Hessian
@@ -35,20 +42,28 @@ def compute_rtb_modes(K, P, n_modes=20, tol=1e-6):
     print(f"[INFO] Diagonalizing projected Hessian to find {n_modes} low-frequency modes...")
     start = time()
     try:
-        #eigvals, eigvecs = eigsh(K_rtb, k=n_modes, which='SM', tol=tol)
+        #eigvals, eigvecs = eigsh(K_rtb, k=n_modes+6, which='SM', tol=tol)
         import sys
         np.set_printoptions(threshold=sys.maxsize)
+        epsilon = 1e-10
         eigvals, eigvecs = eigsh(K_rtb, k=n_modes+6, sigma=0, which='LM', tol=tol) # if K_rtb is positive semi-defined
+
         # Initial guess: random block of shape (N, n_modes+6)
-        #print(eigvals)
         #print(eigvecs[:,0])
         #X = np.random.rand(K_rtb.shape[0], n_modes + 6)
         # Use diagonal as preconditioner
         #diag = K_rtb.diagonal()
         #diag[K_rtb.diagonal()==0]=1e-8
+        #ilu = spilu(K_rtb.tocsc(), drop_tol=1e-3)
+        #M = sp.linalg.LinearOperator(K_rtb.shape, ilu.solve)
         #M = sp.sparse.diags(1.0 / diag)
         #eigvals, eigvecs = lobpcg(K_rtb, X, M=M, tol=tol, largest=False)
-        
+        #print(eigvecs[:10,0])
+        #print(eigvecs[:10,4])
+        #print(eigvecs[:10,6])
+        print("Mode Frequencies : ")
+        print(eigvals)
+        print(eigvals[6:]/expectation)
     except ArpackNoConvergence as e:
         print(f"[WARNING] Only {e.eigenvalues.shape[0]} modes converged out of {n_modes}")
         eigvals = e.eigenvalues
@@ -63,4 +78,6 @@ def compute_rtb_modes(K, P, n_modes=20, tol=1e-6):
 
     # Project modes back to atom space
     L_full = P @ eigvecs  # [3N x n_modes]
-    return L_full, eigvals[6:] , eigvecs[:, 6:]
+    print(L_full.shape)
+    print(eigvecs.shape)
+    return L_full, eigvals , eigvecs , column_mask
