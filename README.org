@@ -7,7 +7,7 @@
 This package provides an implementation of nonlinear normal mode analysis
 based on rigid blocks for macromolecular systems — including proteins, complexes, and large assemblies.
 
-It implements the NOLB method from Hoffmann & Grudinin (2017), using sparse matrix algebra and GPU-accelerated extrapolation [TODO].
+It implements the NOLB method from Hoffmann & Grudinin (2017), using sparse matrix algebra and GPU-accelerated extrapolation.
 
 * Install
 
@@ -33,13 +33,17 @@ nb_sim
 #+begin_example
 Usage: nb_sim [OPTIONS] COMMAND [ARGS]...
 
-  NBSim command line interface
+  NMSim command line interface
 
 Options:
-  --help  Show this message and exit.
+  -s, --store PATH     File for primary data storage (input/output)
+  -o, --outstore PATH  File for output (primary only input)
+  --help               Show this message and exit.
 
 Commands:
-  run-simulator  Run Nonlinear Normal Mode Deformation on a Structure
+  run-simulator            Run Simulation
+  run-simulator-multimode  Run Simulation With Combined Modes
+  run-test                 Run Small Test
 #+end_example
 
 To run a deformation using RTB-based normal modes:
