@@ -38,7 +38,7 @@ def deform_structure(mol,blocks, eigvecs, amplitude, mode_index=0, device=None, 
         evals, evecs = torch.linalg.eigh(I_b)
         evals_clamped = torch.clamp(evals, min=1e-8)
         I_inv_sqrt = evecs @ torch.diag(1.0 / torch.sqrt(evals_clamped)) @ evecs.T
-        vec6 = eigvecs[:, mode_index] if isinstance(eigvecs, torch.Tensor) else eigvecs[:, mode_index]
+        vec6 = eigvecs[:, mode_index] if mode_index>=0 else eigvecs
         
         dof = block_dofs[b]
         vec_b = vec6[offset : offset + dof]

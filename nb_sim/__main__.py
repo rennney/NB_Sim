@@ -93,6 +93,92 @@ def run_simulator(input, output, n_modes, amplitude, view,mode,frames):
 
 
 
+@cli.command()
+@click.option("-i", "--input", required=True, type=str,
+              help="Input PDB file or PDB ID (e.g., 4bij)")
+@click.option("-o", "--output", required=False, type=click.Path(),
+              help="Output PDB file (deformed)")
+@click.option("-n", "--n_modes", default=6, show_default=True,
+              help="Number of normal modes to compute")
+@click.option("-a", "--amplitude", default=5.0, show_default=True,
+              help="Deformation amplitude")
+@click.option("--view/--no-view", default=True,
+              help="Launch PyMOL for visualizing original and deformed structures")
+@click.option("-f", "--frames", default=11, show_default=True,
+              help="Number of frames in oscillation")
+@click.option("-m", "--modes", required=True, type=str,
+              help="Comma-separated list of mode indices (e.g., 0,1,4)")
+@click.option("-w","--weights", type=str, default=None,
+              help="Comma-separated weights for each mode (e.g., 0.2,0.5,0.3). Must match number of modes.")
+
+def run_simulator_multimode(input, output, n_modes, amplitude, view, frames, modes, weights):
+    """
+    Run Simulation With Combined Modes
+    """
+    from time import time
+    import numpy as np
+    import torch
+    from pathlib import Path
+
+    start = time()
+    pdb_path = resolve_pdb_input(input)
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    mol = Molecule(str(pdb_path), device=device)
+    print(f"[INFO] Loaded {len(mol.atoms)} atoms into {len(mol.blocks)} blocks.")
+
+    print("[INFO] Building ANM Hessian...")
+    K = build_anm_hessian(mol.coords)
+
+    masses = np.array([atom[2] for atom in mol.atoms], dtype=np.float64)
+    K_w = mass_weight_hessian(K, masses)
+    print(K_w.shape)
+
+    print("[INFO] Building RTB projection matrix...")
+    blocks = filter_valid_blocks(mol.blocks)
+    P, block_dof = build_rtb_projection(blocks, N_atoms=len(mol.atoms))
+
+    print(f"[INFO] Computing {n_modes} RTB normal modes...")
+    L_full, eigvals, eigvec, column_mask = compute_rtb_modes(K_w, P, n_modes=n_modes)
+
+    if not modes:
+        raise ValueError("You must specify at least one mode index using --modes")
+
+    mode_idxs = np.array([int(m.strip()) for m in modes.split(",")], dtype=int)
+
+    if weights:
+        weight_vals = np.array([float(w.strip()) for w in weights.split(",")], dtype=np.float64)
+        if len(weight_vals) != len(mode_idxs):
+            raise ValueError("Number of weights must match number of modes")
+    else:
+        weight_vals = np.ones_like(mode_idxs, dtype=np.float64)
+
+    weight_vals /= np.linalg.norm(weight_vals)
+
+    # Construct combined eigenvector
+    combined_vec = sum(w * eigvec[:, idx] for w, idx in zip(weight_vals, mode_idxs))
+    #combined_vec = combined_vec / np.linalg.norm(combined_vec)  # normalize for amplitude scaling
+
+    print(f"[INFO] Applying deformation with amplitude {amplitude} from modes {mode_idxs}...")
+
+    alpha_vals = torch.cat([
+        torch.linspace(-amplitude, amplitude, frames // 2 + 1),
+        torch.linspace(amplitude, -amplitude, frames // 2 + 1)[1:]
+    ])
+
+    coord_list = [deform_structure(mol, blocks, combined_vec, a, mode_index=-1,block_dofs=block_dof) for a in alpha_vals]
+
+    out_path = output or Path(pdb_path).with_suffix(".combined.deformed.pdb")
+    save_pdb_trajectory(pdb_path, out_path, coord_list, mol)
+
+    print(f"[INFO] Full simulation completed in {time() - start:.2f} sec")
+    if view:
+        launch_pymol(pdb_path, out_path, only_deformed=False)
+
+
+
+
+
 def check_rotation_magnitudes(eigvecs, block_dofs, mode_index=0):
     print(f"Analyzing RTB mode {mode_index}")
     offset = 0
