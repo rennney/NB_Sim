@@ -83,7 +83,11 @@ def run_simulator(input, output, n_modes, amplitude, view,mode,frames):
     out_path = output or Path(pdb_path).with_suffix(".deformed.pdb")
     #save_pdb_like_original(pdb_path,out_path, coords_def)
     #print(f"[INFO] Deformed structure saved to {out_path}")
-    alpha_vals = torch.cat([torch.linspace(-amplitude, amplitude, frames // 2 + 1),torch.linspace(amplitude, -amplitude, frames // 2 + 1)[1:]])
+    alpha_vals = torch.cat([
+        torch.linspace(0, -amplitude, frames // 4 + 1),                      # 0 → -amp
+        torch.linspace(-amplitude, amplitude, frames // 2 + 1)[1:],                 # -amp → +amp
+        torch.linspace(amplitude, 0, frames // 4 + 1)[1:]                     # +amp → 0
+    ])
     #print(eigenvec.shape,sum(block_dofs_filtered))
     #check_rotation_magnitudes(eigenvec,block_dof,mode_index=mode)
     coord_list = [deform_structure(mol,blocks, eigenvec, a,mode_index=mode,block_dofs=block_dof) for a in alpha_vals]
@@ -163,9 +167,11 @@ def run_simulator_multimode(input, output, n_modes, amplitude, view, frames, mod
 
     print(f"[INFO] Applying deformation with amplitude {amplitude} from modes {mode_idxs}...")
 
+
     alpha_vals = torch.cat([
-        torch.linspace(-amplitude, amplitude, frames // 2 + 1),
-        torch.linspace(amplitude, -amplitude, frames // 2 + 1)[1:]
+        torch.linspace(0, -amplitude, frames // 4 + 1),                      # 0 → -amp
+        torch.linspace(-amplitude, amplitude, frames // 2 + 1)[1:],                 # -amp → +amp
+        torch.linspace(amplitude, 0, frames // 4 + 1)[1:]                     # +amp → 0
     ])
 
     coord_list = [deform_structure(mol, blocks, combined_vec, a, mode_index=-1,block_dofs=block_dof) for a in alpha_vals]
@@ -289,9 +295,11 @@ def fit_modes(initial, goal, n_modes, skip,
     combined_rtb_final = eigvec_sel @ coeffs_final
 
     # Generate trajectory from initial structure
+
     alpha_vals = torch.cat([
-        torch.linspace(-0.6, 0.6, frames // 2 + 1),
-        torch.linspace(0.6, -0.6, frames // 2 + 1)[1:]
+        torch.linspace(0, -1, frames // 4 + 1),                      # 0 → -amp
+        torch.linspace(-1, 1, frames // 2 + 1)[1:],                 # -amp → +amp
+        torch.linspace(1, 0, frames // 4 + 1)[1:]                     # +amp → 0
     ])
     coord_list = [
         deform_structure(mol_init, blocks, combined_rtb_final,
