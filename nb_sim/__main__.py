@@ -10,6 +10,8 @@ from nb_sim.core.anm import build_anm_hessian, mass_weight_hessian ,build_anm_he
 from nb_sim.core.rtb import build_rtb_projection
 from nb_sim.core.modes import compute_rtb_modes
 from nb_sim.core.deform import deform_structure
+from nb_sim.core.fitter import fitter
+from nb_sim.utils.align import align_final_to_initial
 import torch
 import numpy as np
 
@@ -212,6 +214,98 @@ def check_rotation_magnitudes(eigvecs, block_dofs, mode_index=0):
     return rotation_norms, translation_norms
 
 
+@cli.command()
+@click.option("-i", "--initial", required=True, type=str)
+@click.option("-g", "--goal", required=True, type=str)
+@click.option("-n", "--n_modes", default=20, show_default=True)
+@click.option("--skip", default=0, show_default=True)
+@click.option("--max-iter", default=200, show_default=True)
+@click.option("--positive-only", is_flag=True, default=False)
+@click.option("--frames", default=6, show_default=True)
+@click.option("-o", "--output", required=False, type=click.Path())
+@click.option("--view/--no-view", default=True)
+
+def fit_modes(initial, goal, n_modes, skip,
+                             max_iter, positive_only, frames, output, view):
+    """
+    Fit coefficients for initial RTB modes with LBFGS (NOLB-style)
+    and generate nonlinear rigid-block morph from initial structure.
+    """
+
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    pdb_init = resolve_pdb_input(initial)
+    pdb_final = resolve_pdb_input(goal)
+    mol_init_full = Molecule(str(pdb_init), device=device)
+    mol_final_full = Molecule(str(pdb_final), device=device)
+
+    # Get matching atom indices
+    idx_self, idx_other = mol_init_full.match_atoms_by_residue(mol_final_full)
+
+    # Reduce mol_final to only matching atoms
+    mol_final = Molecule.__new__(Molecule)  # bypass __init__
+    mol_final.device = device
+    mol_final.atoms = [mol_final_full.atoms[j] for j in idx_other]
+    mol_final.coords = mol_final_full.coords[idx_other]
+    mol_final.residue_map = {rid: [] for rid in mol_init_full.residue_map.keys() if rid in [a[1] for a in mol_final.atoms]}
+    for k, (element, res_id, mass, resname, serial) in enumerate(mol_final.atoms):
+        mol_final.residue_map[res_id].append(k)
+    mol_final.blocks = []
+    mol_final._build_blocks()
+    
+    idx_self, idx_other = mol_final.match_atoms_by_residue(mol_init_full)
+
+    # Reduce mol_final to only matching atoms
+    mol_init = Molecule.__new__(Molecule)  # bypass __init__
+    mol_init.device = device
+    mol_init.atoms = [mol_init_full.atoms[j] for j in idx_other]
+    mol_init.coords = mol_init_full.coords[idx_other]
+    mol_init.residue_map = {rid: [] for rid in mol_final_full.residue_map.keys() if rid in [a[1] for a in mol_init.atoms]}
+    for k, (element, res_id, mass, resname, serial) in enumerate(mol_init.atoms):
+        mol_init.residue_map[res_id].append(k)
+    mol_init.blocks = []
+    mol_init._build_blocks()
+    
+    R, t = align_final_to_initial(mol_init, mol_final, mode="atoms", mass_weighted=True)
+
+    print("Check Mol Residues : ", len(mol_init.blocks),len(mol_final.blocks))
+    # Build Hessian & modes from initial structure
+    K = build_anm_hessian(mol_init.coords)
+    masses_np = np.array([atom[2] for atom in mol_init.atoms], dtype=np.float64)
+    K_w = mass_weight_hessian(K, masses_np)
+    blocks = filter_valid_blocks(mol_init.blocks)
+    P, block_dofs = build_rtb_projection(blocks, N_atoms=len(mol_init.atoms))
+    _, eigvals, eigvec, _ = compute_rtb_modes(K_w, P, n_modes=n_modes + skip)
+    eigvec_sel = torch.from_numpy(eigvec[:, skip:]).to(device, dtype=torch.float64)
+
+    # Fit coefficients
+    coeffs_final = fitter(mol_init, mol_final, eigvec_sel,
+                                        blocks, block_dofs,
+                                        max_iter=max_iter,
+                                        positive_only=positive_only)
+
+    print("[INFO] Final coefficients:", coeffs_final.cpu().numpy())
+
+    # Build combined RTB vector from initial modes
+    combined_rtb_final = eigvec_sel @ coeffs_final
+
+    # Generate trajectory from initial structure
+    alpha_vals = torch.cat([
+        torch.linspace(-0.6, 0.6, frames // 2 + 1),
+        torch.linspace(0.6, -0.6, frames // 2 + 1)[1:]
+    ])
+    coord_list = [
+        deform_structure(mol_init, blocks, combined_rtb_final,
+                         amplitude=a.item(), mode_index=-1,
+                         block_dofs=block_dofs)
+        for a in alpha_vals
+    ]
+
+    out_path = output or Path(pdb_init).with_suffix(".nolb_lbfgs_fit.pdb")
+    save_pdb_trajectory(pdb_init, out_path, coord_list, mol_init)
+    print(f"[INFO] NOLB-LBFGS trajectory saved to {out_path}")
+
+    if view:
+        launch_pymol(pdb_init, out_path,pdb_final, only_deformed=False)
 
 
 

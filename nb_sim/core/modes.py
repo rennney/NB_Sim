@@ -24,8 +24,6 @@ def compute_rtb_modes(K, P, n_modes=20, tol=1e-8):
         raise ValueError("K and P must be scipy sparse matrices")
 
     # RTB-reduced Hessian
-
-    expectation = np.array([0.000107447, 0.000111208, 0.000259408, 0.000285205, 0.000305688, 0.000518421, 0.000543074 , 0.000555202, 0.000740578, 0.000797631])
     
     #assert (P.T @ P).diagonal().min()>10**-6,  (" P has columns with zero norm — i.e., some of the rigid-body basis vectors are either degenerate or completely missing.")
     column_mask = np.ones(P.shape[1], dtype=bool)
@@ -63,7 +61,6 @@ def compute_rtb_modes(K, P, n_modes=20, tol=1e-8):
         #print(eigvecs[:10,6])
         print("Mode Frequencies : ")
         print(eigvals)
-        print(eigvals[6:]/expectation)
     except ArpackNoConvergence as e:
         print(f"[WARNING] Only {e.eigenvalues.shape[0]} modes converged out of {n_modes}")
         eigvals = e.eigenvalues
@@ -81,3 +78,5 @@ def compute_rtb_modes(K, P, n_modes=20, tol=1e-8):
     print(L_full.shape)
     print(eigvecs.shape)
     return L_full, eigvals , eigvecs , column_mask
+
+

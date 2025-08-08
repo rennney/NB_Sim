@@ -27,6 +27,7 @@ def apply_nonlinear_deform(coords, v, omega, com, amplitude):
     omega_norm = omega.norm()
     #if omega_norm < 1e-8:
     #    return coords + amplitude * v  # pure translation
+    #print("amplitude=",amplitude,"; omega=",omega,"/",omega_norm,"; v=",v)
     n = omega / omega_norm
     dphi = amplitude * omega_norm
     # Split v into parallel and perpendicular components

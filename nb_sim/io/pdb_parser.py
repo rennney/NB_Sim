@@ -53,6 +53,36 @@ class Molecule:
             masses = torch.tensor([self.atoms[i][2] for i in atom_ids], dtype=torch.float64, device=self.device)
             block = RigidBlock(atom_ids, coords, masses, device=self.device)
             self.blocks.append(block)
+            
+    def match_atoms_by_residue(self, other_molecule):
+        """
+        Returns a list of indices into `other_molecule.coords` that correspond
+        to the atoms in this molecule, matched by residue ID and element.
+        Missing atoms are skipped.
+
+        Args:
+            other_molecule (Molecule): the molecule to match against
+
+        Returns:
+            idx_self: indices into self.coords to keep (always 0..len(self)-1)
+            idx_other: indices into other_molecule.coords in matching order
+        """
+        idx_self = []
+        idx_other = []
+
+        # Build a lookup from (res_id, element) -> list of atom indices in other
+        other_lookup = {}
+        for j, (element, res_id, *_rest) in enumerate(other_molecule.atoms):
+            other_lookup.setdefault((res_id, element), []).append(j)
+
+        # Match atoms in self to atoms in other by residue and element
+        for i, (element, res_id, *_rest) in enumerate(self.atoms):
+            if (res_id, element) in other_lookup and other_lookup[(res_id, element)]:
+                j = other_lookup[(res_id, element)].pop(0)
+                idx_self.append(i)
+                idx_other.append(j)
+
+        return idx_self, idx_other
 
 
 def resolve_pdb_input(pdb_input):

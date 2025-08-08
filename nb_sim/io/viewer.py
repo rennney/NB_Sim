@@ -119,13 +119,14 @@ def save_pdb_trajectory(pdb_in, pdb_out, coord_list, mol):
         fout.write("END\n")
 
 
-def launch_pymol(pdb_ref=None, pdb_def=None, only_deformed=False, headless=False):
+def launch_pymol(pdb_ref=None, pdb_def=None, pdb_final=None, only_deformed=False, headless=False):
     """
-    Launch PyMOL to visualize original and/or deformed structures.
+    Launch PyMOL to visualize original, deformed, and optionally final-aligned structures.
 
     Args:
         pdb_ref: path to reference/original PDB
         pdb_def: path to deformed PDB
+        pdb_final: optional path to final/aligned PDB
         only_deformed: if True, only load and show deformed structure
         headless: if True, suppress GUI
     """
@@ -140,14 +141,25 @@ def launch_pymol(pdb_ref=None, pdb_def=None, only_deformed=False, headless=False
         script.append("color orange, deformed")
         script.append("zoom deformed")
     else:
-        script.append(f"load {pdb_ref}, original")
-        script.append(f"load {pdb_def}, deformed")
-        script.append("hide everything")
-        script.append("show cartoon, original")
-        script.append("show cartoon, deformed")
-        script.append("color gray80, original")
-        script.append("color orange, deformed")
-        script.append("align deformed, original")
+        if pdb_ref:
+            script.append(f"load {pdb_ref}, original")
+            script.append("show cartoon, original")
+            script.append("color gray80, original")
+        if pdb_def:
+            script.append(f"load {pdb_def}, deformed")
+            script.append("show cartoon, deformed")
+            script.append("color orange, deformed")
+        if pdb_final:
+            script.append(f"load {pdb_final}, final")
+            script.append("show cartoon, final")
+            script.append("color cyan, final")
+
+        # Align all to original if available
+        if pdb_ref:
+            if pdb_def:
+                script.append("align deformed, original")
+            if pdb_final:
+                script.append("align final, original")
         script.append("zoom")
 
     flags = ["pymol"]

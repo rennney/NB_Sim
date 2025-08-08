@@ -4,7 +4,7 @@ from scipy.spatial import cKDTree
 from scipy.sparse import coo_matrix
 import scipy.sparse as sp
 
-def build_anm_hessian(coords, gamma=1.0, cutoff=15, dtype=np.float64):
+def build_anm_hessian(coords, gamma=1.0, cutoff=10, dtype=np.float64):
     """
     Build a memory-efficient sparse ANM Hessian using KD-tree.
 
