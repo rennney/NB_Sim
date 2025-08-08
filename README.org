@@ -41,6 +41,9 @@ Options:
   --help               Show this message and exit.
 
 Commands:
+  fit-modes                Fit coefficients for initial RTB modes with
+                           LBFGS...
+
   run-simulator            Run Simulation
   run-simulator-multimode  Run Simulation With Combined Modes
   run-test                 Run Small Test
