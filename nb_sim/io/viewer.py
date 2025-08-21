@@ -54,7 +54,77 @@ def save_pdb_like_original(pdb_in, pdb_out, coords):
 
         fout.write("END\n")
 
+
 def save_pdb_trajectory(pdb_in, pdb_out, coord_list, mol):
+    """
+    Save a multi-model PDB trajectory by updating only x, y, z coordinates
+    for atoms retained in `mol`, matching by atom serial number.
+    - If pdb_in already has MODEL records, only the FIRST model's body is used as template.
+    - Original MODEL/ENDMDL/END records are stripped from the template.
+    """
+    with open(pdb_in, "r") as fin:
+        orig = fin.readlines()
+
+    # --- carve out a template body (no MODEL/ENDMDL/END) ---
+    model_starts = [i for i, l in enumerate(orig) if l.startswith("MODEL")]
+    if model_starts:
+        s = model_starts[0]
+        try:
+            e = next(i for i in range(s + 1, len(orig)) if orig[i].startswith("ENDMDL"))
+        except StopIteration:
+            e = len(orig) - 1
+        template_lines = [l for l in orig[s+1:e] if not l.startswith(("MODEL", "ENDMDL", "END"))]
+    else:
+        template_lines = [l for l in orig if not l.startswith(("MODEL", "ENDMDL", "END"))]
+
+    # --- serial mapping from mol order -> coord index ---
+    atom_serials = []
+    for i, atom in enumerate(mol.atoms):
+        if len(atom) >= 5:
+            atom_serials.append(int(atom[4]))
+        else:
+            raise ValueError(f"Missing serial number in atom {i}: {atom}")
+    serial_to_coord_idx = {s: i for i, s in enumerate(atom_serials)}
+
+    # Sanity
+    for model_idx, coords in enumerate(coord_list):
+        if len(coords) != len(atom_serials):
+            raise ValueError(
+                f"[Frame {model_idx}] Coordinate count {len(coords)} "
+                f"≠ number of retained atoms {len(atom_serials)}"
+            )
+
+    def rewrite_atom_line(line, xyz):
+        x, y, z = xyz
+        new_xyz = f"{x:8.3f}{y:8.3f}{z:8.3f}"
+        return line[:30] + new_xyz + line[54:]
+
+    # --- write trajectory ---
+    with open(pdb_out, "w") as fout:
+        for model_idx, coords in enumerate(coord_list):
+            fout.write(f"MODEL     {model_idx+1:4d}\n")
+            for line in template_lines:
+                if line.startswith(("ATOM", "HETATM")):
+                    try:
+                        s = int(line[6:11])
+                    except ValueError:
+                        # Nonstandard serial; just pass through unchanged
+                        fout.write(line)
+                        continue
+                    if s in serial_to_coord_idx:
+                        idx = serial_to_coord_idx[s]
+                        fout.write(rewrite_atom_line(line, coords[idx].tolist()))
+                    else:
+                        # "skipped" atom: preserve as-is
+                        fout.write(line)
+                else:
+                    # metadata/TER/etc: preserve
+                    fout.write(line)
+            fout.write("ENDMDL\n")
+        fout.write("END\n")
+
+
+def save_pdb_trajectory_old(pdb_in, pdb_out, coord_list, mol):
     """
     Save a multi-model PDB trajectory by updating only x, y, z coordinates
     for atoms retained in `mol`, matching them by atom serial number.
