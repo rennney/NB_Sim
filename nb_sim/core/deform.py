@@ -15,7 +15,8 @@ def deform_structure(mol,blocks, eigvecs, amplitude, mode_index=0, device=None, 
         coords_deformed: [N, 3] tensor of deformed atom coordinates
     """
     device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+    #print("shape eigenvec = ",eigvecs.shape)
+    #print(eigvecs[:,mode_index])
     #coords_out = mol.coords.new_zeros((mol.coords.shape[0], 3)).double()
     coords_out = mol.coords.clone()
     # Map from atom index to final coord
@@ -32,27 +33,28 @@ def deform_structure(mol,blocks, eigvecs, amplitude, mode_index=0, device=None, 
 
         Mb = masses.sum().item()
         sqrt_m = torch.sqrt(masses)
-
         # Estimate v and omega: first 3 and last 3 of mode
         I_b = block.compute_inertia_tensor().to(device)
         evals, evecs = torch.linalg.eigh(I_b)
-        evals_clamped = torch.clamp(evals, min=1e-8)
+        evals_clamped = torch.clamp(evals, min=1e-18)
         I_inv_sqrt = evecs @ torch.diag(1.0 / torch.sqrt(evals_clamped)) @ evecs.T
         vec6 = eigvecs[:, mode_index] if mode_index>=0 else eigvecs
-        
         dof = block_dofs[b]
         vec_b = vec6[offset : offset + dof]
         offset += dof
-
+        #print("BLOCK WIht",Mb,dof)
 
         v = torch.as_tensor(vec_b[:3], dtype=torch.float64, device=device)
-        if dof == 6 and b<len(blocks)-1:
+        if dof == 6: #and b<len(blocks)-1:
             omega = torch.as_tensor(vec_b[3:], dtype=torch.float64, device=device)
-            coords_def = apply_nonlinear_deform(atom_coords, v / Mb**0.5,  I_inv_sqrt@omega, com, amplitude)
+            omega = -I_inv_sqrt@omega
+            #coords_def = apply_nonlinear_deform(atom_coords, v / Mb**0.5,  I_inv_sqrt@omega, com, amplitude)
         else:
-            continue
+            omega = torch.zeros(3, dtype=torch.float64, device=device)
+            #continue
             #coords_def = apply_nonlinear_deform(atom_coords, v / Mb**0.5, torch.zeros(3, dtype=torch.float64, device=device), com, amplitude)
-
+        coords_def = apply_nonlinear_deform(atom_coords, v / Mb**0.5,  omega, com, amplitude)
+        #print("deformed coords: ",coords_def)
         for i, aid in enumerate(atom_ids):
             coords_out[aid] = coords_def[i]
 #        v = torch.as_tensor(vec6[:3], dtype=torch.float64, device=device) # translational part

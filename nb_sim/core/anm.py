@@ -4,7 +4,7 @@ from scipy.spatial import cKDTree
 from scipy.sparse import coo_matrix
 import scipy.sparse as sp
 
-def build_anm_hessian(coords, gamma=1.0, cutoff=10, dtype=np.float64):
+def build_anm_hessian(mol,coords, gamma=0.001, cutoff=5, dtype=np.float64): #6.55183
     """
     Build a memory-efficient sparse ANM Hessian using KD-tree.
 
@@ -24,57 +24,48 @@ def build_anm_hessian(coords, gamma=1.0, cutoff=10, dtype=np.float64):
         coords_np = coords.detach().to("cpu").numpy().astype(dtype)
     except Exception:
         coords_np = np.array(coords.tolist(), dtype=dtype)
+    VDW = dict(C=1.70, N=1.55, O=1.52, S=1.80, P=1.80, H=1.20, MG=1.73, NA=2.27, CL=1.75)
 
-    N = coords_np.shape[0]
-    tree = cKDTree(coords_np)
-    pairs = tree.query_pairs(r=cutoff, output_type='ndarray')
-    i, j = pairs[:, 0], pairs[:, 1]
-
-    rij = coords_np[i] - coords_np[j]
-    dist2 = np.sum(rij ** 2, axis=1)
-    valid = dist2 > 1e-18
-    i = i[valid]
-    j = j[valid]
-    rij = rij[valid]
-    dist2 = dist2[valid]
-
-    M = len(i)
-    rij_outer = rij[:, :, None] * rij[:, None, :]  # [M, 3, 3]
-    k_ij = -gamma * rij_outer / dist2[:, None, None]  # [M, 3, 3]
-    # Batch indexing for 3x3 blocks
-    blocks = np.arange(3)
-    a, b = np.meshgrid(blocks, blocks, indexing='ij')  # (3,3)
-    a = a.flatten()  # (9,)
-    b = b.flatten()  # (9,)
-
-    idx_repeat = np.repeat(np.arange(M), 9)
-    a_rep = np.tile(a, M)
-    b_rep = np.tile(b, M)
+    radii = np.array([VDW.get(elem, 1.70) for elem, *_ in mol.atoms])
     
-    row_offdiag_ij = 3 * np.repeat(i, 9) + np.tile(a, M)
-    col_offdiag_ij = 3 * np.repeat(j, 9) + np.tile(b, M)
-    val_offdiag_ij = k_ij[idx_repeat, a_rep, b_rep]
+    N = coords.shape[0]
+    tree = cKDTree(coords)
+    pairs = tree.query_pairs(r=cutoff, output_type='ndarray')  # Mx2 (i<j)
+    i = pairs[:,0]; j = pairs[:,1]
 
-    row_offdiag_ji = 3 * np.repeat(j, 9) + np.tile(a, M)
-    col_offdiag_ji = 3 * np.repeat(i, 9) + np.tile(b, M)
-    val_offdiag_ji = k_ij[idx_repeat, b_rep, a_rep]
+    rij = coords[i] - coords[j]           # (M,3)
+    dist2 = np.einsum('ij,ij->i', rij, rij)
+    mask = dist2 > 1e-18
+    i, j, rij, dist2 = i[mask], j[mask], rij[mask], dist2[mask]
 
-    row_diag_ii = 3 * np.repeat(i, 9) + np.tile(a, M)
-    col_diag_ii = 3 * np.repeat(i, 9) + np.tile(b, M)
-    val_diag_ii = -k_ij[idx_repeat, a_rep, b_rep]
+    u_ij = rij / np.sqrt(dist2)[:,None]   # (M,3)
+    # k_ij blocks: -gamma * u u^T  (3x3 each)
+    k_ij = -gamma * (u_ij[:,:,None] * u_ij[:,None,:])  # (M,3,3)
+    # Build indices for 3x3 blocks
+    blocks = np.arange(3)
+    a,b = np.meshgrid(blocks, blocks, indexing='ij')
+    a = a.ravel(); b = b.ravel()
 
-    row_diag_jj = 3 * np.repeat(j, 9) + np.tile(a, M)
-    col_diag_jj = 3 * np.repeat(j, 9) + np.tile(b, M)
-    val_diag_jj = -k_ij[idx_repeat, b_rep, a_rep]
+    # Off-diagonals (i,j) and (j,i)
+    row_ij = 3*i[:,None] + a; col_ij = 3*j[:,None] + b
+    row_ji = 3*j[:,None] + a; col_ji = 3*i[:,None] + b
 
-    # Stack all triplets
-    row_idx = np.concatenate([row_offdiag_ij, row_offdiag_ji, row_diag_ii, row_diag_jj])
-    col_idx = np.concatenate([col_offdiag_ij, col_offdiag_ji, col_diag_ii, col_diag_jj])
-    data =    np.concatenate([val_offdiag_ij, val_offdiag_ji, val_diag_ii, val_diag_jj])
+    # Diagonals (i,i) and (j,j)
+    row_ii = 3*i[:,None] + a; col_ii = 3*i[:,None] + b
+    row_jj = 3*j[:,None] + a; col_jj = 3*j[:,None] + b
 
-    # Now coo_matrix
-    K = coo_matrix((data, (row_idx, col_idx)), shape=(3 * N, 3 * N), dtype=dtype)
-    print(f"[INFO] Hessian built with {M} spring pairs (batched), dtype={dtype.__name__}")
+    data_ij = k_ij[:,a,b]                 # (M,9)
+    data_ji = k_ij[:,b,a]                 # symmetric
+    data_ii = -k_ij[:,a,b]                # minus row sum
+    data_jj = -k_ij[:,b,a]
+
+    row = np.concatenate([row_ij, row_ji, row_ii, row_jj], axis=None)
+    col = np.concatenate([col_ij, col_ji, col_ii, col_jj], axis=None)
+    dat = np.concatenate([data_ij, data_ji, data_ii, data_jj], axis=None)
+
+    K = coo_matrix((dat, (row, col)), shape=(3*N, 3*N))
+    #print(K.toarray())
+    print(f"[INFO] Hessian built with {len(i)} spring pairs (batched), dtype={dtype.__name__}")
     
     return K
 
@@ -84,7 +75,6 @@ def mass_weight_hessian(K, masses):
     M_inv_sqrt = 1.0 / np.sqrt(mass_diag)
     D = sp.diags(M_inv_sqrt)
     return D @ K @ D
-
 
 
 

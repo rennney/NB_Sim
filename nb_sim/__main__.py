@@ -13,6 +13,7 @@ from nb_sim.core.deform import deform_structure
 from nb_sim.core.fitter import fitter
 from nb_sim.utils.align import align_final_to_initial
 import torch
+import math
 import numpy as np
 
 
@@ -55,11 +56,11 @@ def run_simulator(input, output, n_modes, amplitude, view,mode,frames):
     print(f"[INFO] Loaded {len(mol.atoms)} atoms into {len(mol.blocks)} blocks.")
 
     print("[INFO] Building ANM Hessian...")
-    K = build_anm_hessian(mol.coords)
+    K = build_anm_hessian(mol,mol.coords)
     
     masses = np.array([atom[2] for atom in mol.atoms], dtype=np.float64)
     K_w = mass_weight_hessian(K,masses)
-    print(K_w.shape)
+    #print(K_w.shape)
     print("[INFO] Building RTB projection matrix...")
     blocks = filter_valid_blocks(mol.blocks)
     P, block_dof= build_rtb_projection(blocks, N_atoms=len(mol.atoms))
@@ -83,11 +84,16 @@ def run_simulator(input, output, n_modes, amplitude, view,mode,frames):
     out_path = output or Path(pdb_path).with_suffix(".deformed.pdb")
     #save_pdb_like_original(pdb_path,out_path, coords_def)
     #print(f"[INFO] Deformed structure saved to {out_path}")
-    alpha_vals = torch.cat([
-        torch.linspace(0, -amplitude, frames // 4 + 1),                      # 0 → -amp
-        torch.linspace(-amplitude, amplitude, frames // 2 + 1)[1:],                 # -amp → +amp
-        torch.linspace(amplitude, 0, frames // 4 + 1)[1:]                     # +amp → 0
-    ])
+    #alpha_vals = torch.cat([
+    #    torch.linspace(0, -amplitude, frames // 4 + 1),                      # 0 → -amp
+    #    torch.linspace(-amplitude, amplitude, frames // 2 + 1)[1:],                 # -amp → +amp
+    #    torch.linspace(amplitude, 0, frames // 4 + 1)[1:]                     # +amp → 0
+    #])
+    #alpha_vals = torch.tensor([0,-amplitude/2,-amplitude,-amplitude,-amplitude/2,0,amplitude/2,amplitude,amplitude,amplitude/2])
+    #alpha_vals = torch.tensor([0,amplitude/2,amplitude,amplitude,amplitude/2,0,-amplitude/2,-amplitude,-amplitude,-amplitude/2])
+    k = torch.arange(frames,  device=device)
+    alpha_vals = amplitude * torch.sin(2*math.pi * k / frames)
+    #print("frames: ",alpha_vals)
     #print(eigenvec.shape,sum(block_dofs_filtered))
     #check_rotation_magnitudes(eigenvec,block_dof,mode_index=mode)
     coord_list = [deform_structure(mol,blocks, eigenvec, a,mode_index=mode,block_dofs=block_dof) for a in alpha_vals]
@@ -134,7 +140,7 @@ def run_simulator_multimode(input, output, n_modes, amplitude, view, frames, mod
     print(f"[INFO] Loaded {len(mol.atoms)} atoms into {len(mol.blocks)} blocks.")
 
     print("[INFO] Building ANM Hessian...")
-    K = build_anm_hessian(mol.coords)
+    K = build_anm_hessian(mol,mol.coords)
 
     masses = np.array([atom[2] for atom in mol.atoms], dtype=np.float64)
     K_w = mass_weight_hessian(K, masses)
@@ -169,9 +175,9 @@ def run_simulator_multimode(input, output, n_modes, amplitude, view, frames, mod
 
 
     alpha_vals = torch.cat([
-        torch.linspace(0, -amplitude, frames // 4 + 1),                      # 0 → -amp
-        torch.linspace(-amplitude, amplitude, frames // 2 + 1)[1:],                 # -amp → +amp
-        torch.linspace(amplitude, 0, frames // 4 + 1)[1:]                     # +amp → 0
+        torch.linspace(0, amplitude, frames // 4 + 1),                      # 0 → -amp
+        torch.linspace(amplitude, -amplitude, frames // 2 + 1)[1:],                 # -amp → +amp
+        torch.linspace(-amplitude, 0, frames // 4 + 1)[1:]                     # +amp → 0
     ])
 
     coord_list = [deform_structure(mol, blocks, combined_vec, a, mode_index=-1,block_dofs=block_dof) for a in alpha_vals]
@@ -275,7 +281,7 @@ def fit_modes(initial, goal, n_modes, skip,
 
     print("Check Mol Residues : ", len(mol_init.blocks),len(mol_final.blocks))
     # Build Hessian & modes from initial structure
-    K = build_anm_hessian(mol_init.coords)
+    K = build_anm_hessian(mol_init,mol_init.coords)
     masses_np = np.array([atom[2] for atom in mol_init.atoms], dtype=np.float64)
     K_w = mass_weight_hessian(K, masses_np)
     blocks = filter_valid_blocks(mol_init.blocks)
@@ -296,11 +302,17 @@ def fit_modes(initial, goal, n_modes, skip,
 
     # Generate trajectory from initial structure
 
+    #alpha_vals = torch.cat([
+    #    torch.linspace(0, -1, frames // 4 + 1),                      # 0 → -amp
+    #    torch.linspace(-1, 1, frames // 2 + 1)[1:],                 # -amp → +amp
+    #    torch.linspace(1, 0, frames // 4 + 1)[1:]                     # +amp → 0
+    #])
     alpha_vals = torch.cat([
-        torch.linspace(0, -1, frames // 4 + 1),                      # 0 → -amp
-        torch.linspace(-1, 1, frames // 2 + 1)[1:],                 # -amp → +amp
-        torch.linspace(1, 0, frames // 4 + 1)[1:]                     # +amp → 0
+        torch.linspace(0, 1, frames // 2 + 1),                      # 0 → -amp
+        torch.linspace(1, 0, frames // 2 + 1)[1:]                     # +amp → 0
     ])
+    #k = torch.arange(frames,  device=device)
+    #alpha_vals = 1 * torch.sin(2*math.pi * k / frames)
     coord_list = [
         deform_structure(mol_init, blocks, combined_rtb_final,
                          amplitude=a.item(), mode_index=-1,

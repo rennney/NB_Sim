@@ -35,7 +35,6 @@ def build_rtb_projection(blocks, N_atoms):
         except np.linalg.LinAlgError:
             print(f"[WARN] Block {b} has singular inertia tensor, use translation only")
             use_rotation = False
-
         if use_rotation:
             block_dof.append(6)
         else:
@@ -55,18 +54,20 @@ def build_rtb_projection(blocks, N_atoms):
         if use_rotation:
             # Build full 3N_block x 3 matrix
             B_rot = np.zeros((3 * len(atom_ids), 3))
+
+            E = np.eye(3)
             for j in range(3):
+                u = I_b_inv_sqrt @ E[:, j]           # u_j = I^{-1/2} e_j
                 col_entries = []
                 for i in range(len(atom_ids)):
-                    rel = coords[i] - com
-                    rel_vec = -cross_unit(j, rel)
-                    rot_vec = I_b_inv_sqrt @ rel_vec
+                    rel = coords[i] - com            # r_i - c
+                    rot_vec = np.cross(rel, u)       # rel × (I^{-1/2} e_j)   <-- RIGHT
                     col_entries.extend(np.sqrt(masses[i]) * rot_vec)
                 B_rot[:, j] = col_entries
 
             # Orthonormalize rotation columns
-            Q_rot, _ = np.linalg.qr(B_rot)  # shape [3N_block x 3]
-        
+            #Q_rot, _ = np.linalg.qr(B_rot)  # shape [3N_block x 3]
+            Q_rot = B_rot
             for j in range(3):  # rotation axis index
                 for i, atom_id in enumerate(atom_ids):
                     for k in range(3):  # vector component
@@ -79,6 +80,7 @@ def build_rtb_projection(blocks, N_atoms):
 
         col_offset += 6 if use_rotation else 3
     P = coo_matrix((data, (row_idx, col_idx)), shape=(3 * N_atoms, col_offset))
+    
     return P.tocsr(), block_dof
 
 

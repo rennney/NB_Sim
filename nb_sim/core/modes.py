@@ -34,17 +34,46 @@ def compute_rtb_modes(K, P, n_modes=20, tol=1e-8):
     #plt.colorbar()
     #plt.show()
     K_rtb = P.T @ K @ P  # [6n x 6n], still sparse
+    
+    # 1) Atom-space (ANM) 3x3-block interactions: count distinct (i_atom, j_atom)
+    #    blocks that have ≥1 nonzero entry in K.
+    K_coo = K.tocoo()
+    anm_block_pairs = set(zip(K_coo.row // 3, K_coo.col // 3))
+    ANM_interactions_3x3 = len(anm_block_pairs)
+
+    # 2) RTB-space block–block interactions from K_rtb (= P^T K P)
+    #    We need a mapping from each RTB column to its parent block.
+    #    Columns belonging to the same rigid block touch exactly the same atom rows in P.
+    Pc = P.tocsc()
+    col2blk = np.empty(P.shape[1], dtype=np.int32)
+    sig2bid = {}
+    bid = 0
+    for c in range(Pc.shape[1]):
+        rows = Pc.indices[Pc.indptr[c]:Pc.indptr[c+1]]
+        atoms = tuple(np.unique(rows // 3))  # set of atoms this column (DOF) touches
+        blk_id = sig2bid.setdefault(atoms, bid)
+        if blk_id == bid:
+            bid += 1
+        col2blk[c] = blk_id
+
+    Kr = K_rtb.tocoo()
+    rtb_block_pairs = {(col2blk[r], col2blk[c]) for r, c in zip(Kr.row, Kr.col)}
+    RTB_interactions_blocks = len(rtb_block_pairs)
+
+    print(f"[INFO] ANM 3x3 blocks with ≥1 nz: {ANM_interactions_3x3}")
+    print(f"[INFO] RTB block–block couplings: {RTB_interactions_blocks}")
+    
     print(f"[INFO] Projecting full Hessian to RTB space... (size: {K_rtb.shape})")
     # Compute eigenvalues/eigenvectors of RTB Hessian
     # We skip first 6 zero modes (rigid-body)
     print(f"[INFO] Diagonalizing projected Hessian to find {n_modes} low-frequency modes...")
     start = time()
     try:
-        #eigvals, eigvecs = eigsh(K_rtb, k=n_modes+6, which='SM', tol=tol)
+        #eigvals, eigvecs = eigsh(K_rtb.toarray(), k=n_modes+6, which='SM', tol=tol)
         import sys
         np.set_printoptions(threshold=sys.maxsize)
         epsilon = 1e-10
-        eigvals, eigvecs = eigsh(K_rtb, k=n_modes+6, sigma=0, which='LM', tol=tol) # if K_rtb is positive semi-defined
+        eigvals, eigvecs = eigsh(K_rtb, k=n_modes+6, sigma=epsilon, which='LM', tol=tol) # if K_rtb is positive semi-defined
 
         # Initial guess: random block of shape (N, n_modes+6)
         #print(eigvecs[:,0])
@@ -60,7 +89,12 @@ def compute_rtb_modes(K, P, n_modes=20, tol=1e-8):
         #print(eigvecs[:10,4])
         #print(eigvecs[:10,6])
         print("Mode Frequencies : ")
+        #import math
+        #print(np.sqrt(eigvals))
         print(eigvals)
+        #print("Diagnostics : ")
+        #expct = [0.00483575,0.0107064,0.0113522,0.0143678]
+        #print(eigvals[6:]/[x**2 for x in expct])
     except ArpackNoConvergence as e:
         print(f"[WARNING] Only {e.eigenvalues.shape[0]} modes converged out of {n_modes}")
         eigvals = e.eigenvalues
@@ -75,8 +109,7 @@ def compute_rtb_modes(K, P, n_modes=20, tol=1e-8):
 
     # Project modes back to atom space
     L_full = P @ eigvecs  # [3N x n_modes]
-    print(L_full.shape)
-    print(eigvecs.shape)
+
     return L_full, eigvals , eigvecs , column_mask
 
 

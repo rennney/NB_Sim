@@ -97,7 +97,7 @@ def save_pdb_trajectory(pdb_in, pdb_out, coord_list, mol):
     def rewrite_atom_line(line, xyz):
         x, y, z = xyz
         new_xyz = f"{x:8.3f}{y:8.3f}{z:8.3f}"
-        return line[:30] + new_xyz + line[54:]
+        return line[:30] + new_xyz + "  "+line[54:]
 
     # --- write trajectory ---
     with open(pdb_out, "w") as fout:
