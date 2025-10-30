@@ -6,7 +6,7 @@ from pathlib import Path
 from nb_sim.io.viewer import save_pdb, save_pdb_like_original, save_pdb_trajectory, launch_pymol
 from nb_sim.io.pdb_parser import Molecule, resolve_pdb_input
 from nb_sim.utils.validation import filter_valid_blocks
-from nb_sim.core.anm import build_anm_hessian, mass_weight_hessian ,build_anm_hessian1,build_anm_hessian2
+from nb_sim.core.anm import build_anm_hessian, mass_weight_hessian
 from nb_sim.core.rtb import build_rtb_projection
 from nb_sim.core.modes import compute_rtb_modes
 from nb_sim.core.deform import deform_structure
